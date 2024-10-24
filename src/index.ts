@@ -129,7 +129,7 @@ streamer.client.on('voiceStateUpdate', (oldState, newState) => {
 })
 
 streamer.client.on('messageCreate', async (message) => {
-    if (message.author.bot) return; // ignore bots
+    //if (message.author.bot) return; // ignore bots // DO NOT IGNORE BOTS
     if (message.author.id === streamer.client.user?.id) return; // ignore self
     if (!config.cmdChannelId.includes(message.channel.id.toString())) return; // ignore non-command channels
     if (!message.content.startsWith(config.prefix!)) return; // ignore non-commands
