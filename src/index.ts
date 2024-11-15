@@ -198,6 +198,7 @@ streamer.client.on('messageCreate', async (message) => {
                 console.log('Playing ( ' + videoname + ' )...');
                 streamer.client.user?.setActivity(status_watch(videoname) as unknown as ActivityOptions)
                 break;
+            /*
             case 'playlink':
                 if (streamStatus.joined) {
                     message.reply('**Already joined**');
@@ -292,6 +293,7 @@ streamer.client.on('messageCreate', async (message) => {
                 }
 
                 break;
+            */
             case 'stop':
                 if (!streamStatus.joined) {
                     message.reply('**Already Stopped!**');
@@ -376,21 +378,6 @@ streamer.client.on('messageCreate', async (message) => {
                     play: {
                         description: 'Play a video',
                         usage: 'play [video name]',
-                    },
-
-                    playlink: {
-                        description: 'Play a video/video/stream direct link or from youtube link',
-                        usage: 'playlink [link]',
-                    },
-
-                    ytplay: {
-                        description: 'Play a YouTube video from a title query',
-                        usage: 'ytplay [query]',
-                    },
-
-                    ytsearch: {
-                        description: 'Search for a YouTube video using a title query',
-                        usage: 'ytsearch [query]',
                     },
 
                     stop: {
