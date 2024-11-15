@@ -1,14 +1,16 @@
 import { Client, TextChannel, CustomStatus, ActivityOptions, MessageAttachment } from "discord.js-selfbot-v13";
-import { command, streamLivestreamVideo, MediaUdp, StreamOptions, Streamer } from "@dank074/discord-video-stream";
-import config from "./config"
+import { streamLivestreamVideo, MediaUdp, StreamOptions, Streamer, Utils } from "@dank074/discord-video-stream";
+import config from "./config.js"
 import fs from 'fs';
 import path from 'path';
 import ytdl from '@distube/ytdl-core';
 import yts from 'play-dl';
 import ffmpeg from 'fluent-ffmpeg';
-import { getVideoParams, ffmpegScreenshot } from "./utils/ffmpeg";
+import { getVideoParams, ffmpegScreenshot } from "./utils/ffmpeg.js";
+import PCancelable from "p-cancelable";
 
 const streamer = new Streamer(new Client());
+let command: PCancelable<string>;
 
 const streamOpts: StreamOptions = {
     width: config.width,
@@ -17,17 +19,11 @@ const streamOpts: StreamOptions = {
     bitrateKbps: config.bitrateKbps,
     maxBitrateKbps: config.maxBitrateKbps,
     hardwareAcceleratedDecoding: config.hardwareAcceleratedDecoding,
-    videoCodec: config.videoCodec === 'VP8' ? 'VP8' : 'H264',
+    videoCodec: Utils.normalizeVideoCodec(config.videoCodec),
 
     /**
      * Advanced options
      * 
-     * Ffmpeg will read frames at native framerate. Disabling this make ffmpeg read frames as
-     * fast as possible and `setTimeout` will be used to control output fps instead. Enabling this
-     * can result in certain streams having video/audio out of sync
-     */
-    readAtNativeFps: false,
-    /**
      * Enables sending RTCP sender reports. Helps the receiver synchronize the audio/video frames, except in some weird
      * cases which is why you can disable it
      */
@@ -36,7 +32,16 @@ const streamOpts: StreamOptions = {
      * Encoding preset for H264 or H265. The faster it is, the lower the quality
      * Available presets: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
      */
-    h26xPreset: 'ultrafast'
+    h26xPreset: 'ultrafast',
+    /**
+     * Adds ffmpeg params to minimize latency and start outputting video as fast as possible.
+     *  Might create lag in video output in some rare cases
+     */
+    minimizeLatency: false,
+    /**
+     * ChaCha20-Poly1305 Encryption is faster than AES-256-GCM, except when using AES-NI
+     */
+    forceChacha20Encryption: true
 };
 
 // Create the videosFolder dir if it doesn't exist
@@ -301,29 +306,29 @@ streamer.client.on('messageCreate', async (message) => {
                     channelId: '',
                     cmdChannelId: streamStatus.channelInfo.cmdChannelId
                 }
-                // use sigkill??
-                command?.kill("SIGKILL");
+                command?.cancel()
                 console.log("Stopped playing")
                 message.reply('**Stopped playing.**');
                 break;
-            case 'pause':
-                if (streamStatus.playing) {
-                    command?.kill("SIGSTOP");
-                    message.reply('Paused');
-                    streamStatus.playing = false;
-                } else {
-                    message.reply('Not playing');
-                }
-                break;
-            case 'resume':
-                if (!streamStatus.playing) {
-                    command?.kill("SIGCONT");
-                    message.reply('Resumed');
-                    streamStatus.playing = true;
-                } else {
-                    message.reply('Already Playing!');
-                }
-                break;
+            // Disabled pause and resume commands until I find a better implementation
+            // case 'pause':
+            //     if (streamStatus.playing) {
+            //         command?.kill("SIGSTOP");
+            //         message.reply('Paused');
+            //         streamStatus.playing = false;
+            //     } else {
+            //         message.reply('Not playing');
+            //     }
+            //     break;
+            // case 'resume':
+            //     if (!streamStatus.playing) {
+            //         command?.kill("SIGCONT");
+            //         message.reply('Resumed');
+            //         streamStatus.playing = true;
+            //     } else {
+            //         message.reply('Already Playing!');
+            //     }
+            //     break;
             case 'list':
                 message.reply(`Available videos:\n${videos.map(m => m.name).join('\n')}`);
                 break;
@@ -457,7 +462,8 @@ async function playVideo(video: string, udpConn: MediaUdp) {
     try {
         const videoStream = await streamLivestreamVideo(video, udpConn);
         videoStream;
-        console.log("Finished playing video");
+        const res = await command;
+        console.log("Finished playing video " + res);
         // Check: if tmpVideo exists, delete it
         if (fs.existsSync(tmpVideo)) {
             fs.unlink(tmpVideo, (err) => {
@@ -473,7 +479,6 @@ async function playVideo(video: string, udpConn: MediaUdp) {
     } finally {
         udpConn.mediaConnection.setSpeaking(false);
         udpConn.mediaConnection.setVideoStatus(false);
-        command?.kill("SIGKILL");
         await sendFinishMessage();
         await cleanupStreamStatus();
     }
@@ -554,7 +559,7 @@ async function ytVideoCache(ytVideo: any): Promise<string | null> {
 
 async function getVideoUrl(videoUrl: string): Promise<string | null> {
     try {
-        const video = await ytdl.getInfo(videoUrl);
+        const video = await ytdl.getInfo(videoUrl, { playerClients: ['WEB', 'ANDROID'] });
         const videoDetails = video.videoDetails;
 
         if (videoDetails.isLiveContent) {
@@ -598,7 +603,7 @@ async function ytPlayTitle(title: string): Promise<string | null> {
 
             // Ensure videoId is valid before proceeding
             if (videoId) {
-                const ytVideoInfo = await ytdl.getInfo(videoId);
+                const ytVideoInfo = await ytdl.getInfo(videoId, { playerClients: ['WEB', 'ANDROID'] });
 
                 // Check if youtube video caching is enabled
                 if (config.ytVideoCache) {
@@ -642,5 +647,5 @@ async function ytSearch(title: string): Promise<string[]> {
 // Run server if enabled in config
 if (config.server_enabled) {
     // Run server.js
-    require('./server');
+    import('./server.js');
 }
